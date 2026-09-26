@@ -32,9 +32,19 @@ def join_match(user_id, username):
     matches[match_id] = {
         "player1": player1,
         "player2": player2,
+
         "batting": batting,
-        "score": 0,
+
+        "score1": 0,
+        "score2": 0,
+
+        "wickets1": 0,
+        "wickets2": 0,
+
+        "innings": 1,
+
         "target": None,
+
         "choices": {}
     }
 
@@ -69,15 +79,33 @@ def submit_choice(match_id, user_id, choice):
 
     match["choices"] = {}
 
+    # Same number = wicket
     if choice1 == choice2:
+
+        if match["batting"] == 1:
+            match["wickets1"] += 1
+        else:
+            match["wickets2"] += 1
+
         return {
             "status": "wicket",
             "choice1": choice1,
-            "choice2": choice2
+            "choice2": choice2,
+            "score1": match["score1"],
+            "score2": match["score2"]
         }
+
+    # Batter gets their chosen number
+    if match["batting"] == 1:
+        match["score1"] += choice1
+    else:
+        match["score2"] += choice1
 
     return {
         "status": "runs",
+        "runs": choice1,
         "choice1": choice1,
-        "choice2": choice2
+        "choice2": choice2,
+        "score1": match["score1"],
+        "score2": match["score2"]
     }

@@ -55,7 +55,7 @@ async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if result["status"] == "already_waiting":
         await update.message.reply_text(
-            "⚠️ You are already waiting for a player."
+            "⚠️ You are already waiting."
         )
         return
 
@@ -68,8 +68,9 @@ async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "🔥 MATCH FOUND!\n\n"
             f"🏏 {p1} vs {p2}\n\n"
-            "Both players choose a number from 1–6.\n"
-            "Don't choose the same number!\n\n"
+            "Both players choose 1–6.\n"
+            "Same number = WICKET 💥\n"
+            "Different number = batter gets runs.\n\n"
             "🎮 Choose your number:",
             reply_markup=number_buttons(match_id)
         )
@@ -80,35 +81,32 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     parts = query.data.split(":")
-
     match_id = parts[1]
     choice = int(parts[2])
 
     match = get_match(match_id)
 
     if not match:
-        await query.edit_message_text(
-            "❌ Match not found."
-        )
+        await query.edit_message_text("❌ Match not found.")
         return
 
     user_id = query.from_user.id
 
-    # Check that the player belongs to this match
-    if user_id not in [
+    players = [
         match["player1"]["user_id"],
         match["player2"]["user_id"]
-    ]:
+    ]
+
+    if user_id not in players:
         await query.answer(
             "You are not part of this match!",
             show_alert=True
         )
         return
 
-    # Prevent the same player from choosing twice
     if user_id in match["choices"]:
         await query.answer(
-            "You already selected a number!",
+            "You already selected!",
             show_alert=True
         )
         return
@@ -126,20 +124,30 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    score1 = result["score1"]
+    score2 = result["score2"]
+
     if result["status"] == "wicket":
+
         await query.edit_message_text(
             "💥 WICKET!\n\n"
-            f"Both players chose {result['choice1']}.\n\n"
-            "Same number = OUT!"
+            f"Both chose {result['choice1']}.\n\n"
+            f"🏏 Score:\n"
+            f"{match['player1']['username']}: {score1}\n"
+            f"{match['player2']['username']}: {score2}\n\n"
+            "Choose again:",
+            reply_markup=number_buttons(match_id)
         )
 
-    elif result["status"] == "runs":
+    else:
+
         await query.edit_message_text(
-            "🏏 BALL RESULT\n\n"
-            f"Player 1: {result['choice1']}\n"
-            f"Player 2: {result['choice2']}\n\n"
-            f"🏃 Runs scored: {result['choice1']}\n\n"
-            "Choose again for the next ball."
+            f"🏏 {result['runs']} RUNS!\n\n"
+            f"🏏 Score:\n"
+            f"{match['player1']['username']}: {score1}\n"
+            f"{match['player2']['username']}: {score2}\n\n"
+            "🎮 Next ball:",
+            reply_markup=number_buttons(match_id)
         )
 
 
@@ -151,19 +159,10 @@ def main():
 
     app = Application.builder().token(BOT_TOKEN).build()
 
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("join", join))
     app.add_handler(
-        CommandHandler("start", start)
-    )
-
-    app.add_handler(
-        CommandHandler("join", join)
-    )
-
-    app.add_handler(
-        CallbackQueryHandler(
-            play,
-            pattern=r"^play:"
-        )
+        CallbackQueryHandler(play, pattern=r"^play:")
     )
 
     print("🏏 Hand Cricket Bot is running...")

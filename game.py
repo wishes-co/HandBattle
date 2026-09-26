@@ -12,7 +12,6 @@ def join_match(user_id, username):
             "user_id": user_id,
             "username": username
         }
-
         return {"status": "waiting"}
 
     if waiting_player["user_id"] == user_id:
@@ -28,18 +27,15 @@ def join_match(user_id, username):
 
     match_id = f"{player1['user_id']}_{player2['user_id']}"
 
-    first_batter = random.choice(["player1", "player2"])
+    batting = random.choice([1, 2])
 
     matches[match_id] = {
         "player1": player1,
         "player2": player2,
-        "score1": 0,
-        "score2": 0,
-        "wickets1": 0,
-        "wickets2": 0,
-        "innings": 1,
-        "batting": first_batter,
-        "target": None
+        "batting": batting,
+        "score": 0,
+        "target": None,
+        "choices": {}
     }
 
     return {
@@ -47,7 +43,7 @@ def join_match(user_id, username):
         "match_id": match_id,
         "player1": player1,
         "player2": player2,
-        "batting": first_batter
+        "batting": batting
     }
 
 
@@ -55,19 +51,33 @@ def get_match(match_id):
     return matches.get(match_id)
 
 
-def play_ball(match_id, batter_choice, bowler_choice):
+def submit_choice(match_id, user_id, choice):
     match = matches.get(match_id)
 
     if not match:
-        return None
+        return {"status": "not_found"}
 
-    if batter_choice == bowler_choice:
+    match["choices"][user_id] = choice
+
+    if len(match["choices"]) < 2:
+        return {"status": "waiting"}
+
+    users = list(match["choices"].keys())
+
+    choice1 = match["choices"][users[0]]
+    choice2 = match["choices"][users[1]]
+
+    match["choices"] = {}
+
+    if choice1 == choice2:
         return {
-            "result": "wicket",
-            "runs": 0
+            "status": "wicket",
+            "choice1": choice1,
+            "choice2": choice2
         }
 
     return {
-        "result": "runs",
-        "runs": batter_choice
+        "status": "runs",
+        "choice1": choice1,
+        "choice2": choice2
     }

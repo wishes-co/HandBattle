@@ -8,8 +8,18 @@ from telegram.ext import (
     ContextTypes
 )
 
-from database import create_tables, add_player
-from game import join_match, get_match, submit_choice
+from database import (
+    create_tables,
+    add_player,
+    get_stats,
+    record_result
+)
+
+from game import (
+    join_match,
+    get_match,
+    submit_choice
+)
 
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -44,7 +54,35 @@ def score_text(match):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🏏 HAND CRICKET BOT\n\n"
-        "Use /join to find an opponent."
+        "/join - Find an opponent\n"
+        "/stats - View your stats"
+    )
+
+
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+
+    add_player(
+        user.id,
+        user.username or user.first_name
+    )
+
+    data = get_stats(user.id)
+
+    if not data:
+        await update.message.reply_text(
+            "❌ Stats not found."
+        )
+        return
+
+    username, matches, wins, losses = data
+
+    await update.message.reply_text(
+        "📊 YOUR STATS\n\n"
+        f"👤 Player: {username}\n"
+        f"🏏 Matches: {matches}\n"
+        f"🏆 Wins: {wins}\n"
+        f"❌ Losses: {losses}"
     )
 
 
@@ -132,40 +170,11 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     if result["status"] == "waiting":
-
         await query.edit_message_text(
             "✅ Your number is locked!\n\n"
             "⏳ Waiting for your opponent..."
         )
         return
-
-    # -------------------------
-    # MATCH END
-    # -------------------------
-
-    if result["status"] == "match_end":
-
-        score1 = result["score1"]
-        score2 = result["score2"]
-
-        if score1 > score2:
-            winner = match["player1"]["username"]
-        elif score2 > score1:
-            winner = match["player2"]["username"]
-        else:
-            winner = "DRAW 🤝"
-
-        await query.edit_message_text(
-            "🏆 MATCH OVER!\n\n"
-            f"🥇 Winner: {winner}\n\n"
-            f"{score_text(match)}\n\n"
-            "🔥 Thanks for playing!"
-        )
-        return
-
-    # -------------------------
-    # INNINGS END
-    # -------------------------
 
     if result["status"] == "innings_end":
 
@@ -173,15 +182,45 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🔄 INNINGS OVER!\n\n"
             f"{score_text(match)}\n\n"
             f"🎯 Target: {result['target']}\n\n"
-            "🏏 Second innings begins!\n"
-            "Choose your number:",
+            "🏏 Second innings begins!",
             reply_markup=number_buttons(match_id)
         )
         return
 
-    # -------------------------
-    # WICKET
-    # -------------------------
+    if result["status"] == "match_end":
+
+        score1 = result["score1"]
+        score2 = result["score2"]
+
+        if score1 > score2:
+            winner_id = match["player1"]["user_id"]
+            loser_id = match["player2"]["user_id"]
+            winner = match["player1"]["username"]
+
+        elif score2 > score1:
+            winner_id = match["player2"]["user_id"]
+            loser_id = match["player1"]["user_id"]
+            winner = match["player2"]["username"]
+
+        else:
+            await query.edit_message_text(
+                "🤝 MATCH DRAW!\n\n"
+                f"{score_text(match)}"
+            )
+            return
+
+        record_result(
+            winner_id,
+            loser_id
+        )
+
+        await query.edit_message_text(
+            "🏆 MATCH OVER!\n\n"
+            f"🥇 Winner: {winner}\n\n"
+            f"{score_text(match)}\n\n"
+            "📊 Use /stats to check your record."
+        )
+        return
 
     if result["status"] == "wicket":
 
@@ -194,16 +233,10 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # -------------------------
-    # RUNS
-    # -------------------------
-
     if result["status"] == "runs":
 
         await query.edit_message_text(
             f"🏏 {result['runs']} RUNS!\n\n"
-            f"Player 1 chose: {result['choice1']}\n"
-            f"Player 2 chose: {result['choice2']}\n\n"
             f"{score_text(match)}\n\n"
             "🎮 Next ball:",
             reply_markup=number_buttons(match_id)
@@ -225,6 +258,10 @@ def main():
 
     app.add_handler(
         CommandHandler("join", join)
+    )
+
+    app.add_handler(
+        CommandHandler("stats", stats)
     )
 
     app.add_handler(

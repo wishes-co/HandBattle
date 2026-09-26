@@ -32,6 +32,15 @@ def number_buttons(match_id):
     return InlineKeyboardMarkup(keyboard)
 
 
+def score_text(match):
+    return (
+        f"🏏 {match['player1']['username']}: "
+        f"{match['score1']}/{match['wickets1']}\n"
+        f"🏏 {match['player2']['username']}: "
+        f"{match['score2']}/{match['wickets2']}"
+    )
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🏏 HAND CRICKET BOT\n\n"
@@ -60,6 +69,7 @@ async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if result["status"] == "matched":
+
         match_id = result["match_id"]
 
         p1 = result["player1"]["username"]
@@ -68,26 +78,30 @@ async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "🔥 MATCH FOUND!\n\n"
             f"🏏 {p1} vs {p2}\n\n"
-            "Both players choose 1–6.\n"
+            "Choose a number from 1–6.\n"
             "Same number = WICKET 💥\n"
-            "Different number = batter gets runs.\n\n"
+            "Different number = runs.\n\n"
             "🎮 Choose your number:",
             reply_markup=number_buttons(match_id)
         )
 
 
 async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     query = update.callback_query
     await query.answer()
 
     parts = query.data.split(":")
+
     match_id = parts[1]
     choice = int(parts[2])
 
     match = get_match(match_id)
 
     if not match:
-        await query.edit_message_text("❌ Match not found.")
+        await query.edit_message_text(
+            "❌ Match not found."
+        )
         return
 
     user_id = query.from_user.id
@@ -118,40 +132,86 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     if result["status"] == "waiting":
+
         await query.edit_message_text(
             "✅ Your number is locked!\n\n"
             "⏳ Waiting for your opponent..."
         )
         return
 
-    score1 = result["score1"]
-    score2 = result["score2"]
+    # -------------------------
+    # MATCH END
+    # -------------------------
+
+    if result["status"] == "match_end":
+
+        score1 = result["score1"]
+        score2 = result["score2"]
+
+        if score1 > score2:
+            winner = match["player1"]["username"]
+        elif score2 > score1:
+            winner = match["player2"]["username"]
+        else:
+            winner = "DRAW 🤝"
+
+        await query.edit_message_text(
+            "🏆 MATCH OVER!\n\n"
+            f"🥇 Winner: {winner}\n\n"
+            f"{score_text(match)}\n\n"
+            "🔥 Thanks for playing!"
+        )
+        return
+
+    # -------------------------
+    # INNINGS END
+    # -------------------------
+
+    if result["status"] == "innings_end":
+
+        await query.edit_message_text(
+            "🔄 INNINGS OVER!\n\n"
+            f"{score_text(match)}\n\n"
+            f"🎯 Target: {result['target']}\n\n"
+            "🏏 Second innings begins!\n"
+            "Choose your number:",
+            reply_markup=number_buttons(match_id)
+        )
+        return
+
+    # -------------------------
+    # WICKET
+    # -------------------------
 
     if result["status"] == "wicket":
 
         await query.edit_message_text(
             "💥 WICKET!\n\n"
             f"Both chose {result['choice1']}.\n\n"
-            f"🏏 Score:\n"
-            f"{match['player1']['username']}: {score1}\n"
-            f"{match['player2']['username']}: {score2}\n\n"
-            "Choose again:",
+            f"{score_text(match)}\n\n"
+            "🎮 Next ball:",
             reply_markup=number_buttons(match_id)
         )
+        return
 
-    else:
+    # -------------------------
+    # RUNS
+    # -------------------------
+
+    if result["status"] == "runs":
 
         await query.edit_message_text(
             f"🏏 {result['runs']} RUNS!\n\n"
-            f"🏏 Score:\n"
-            f"{match['player1']['username']}: {score1}\n"
-            f"{match['player2']['username']}: {score2}\n\n"
+            f"Player 1 chose: {result['choice1']}\n"
+            f"Player 2 chose: {result['choice2']}\n\n"
+            f"{score_text(match)}\n\n"
             "🎮 Next ball:",
             reply_markup=number_buttons(match_id)
         )
 
 
 def main():
+
     if not BOT_TOKEN:
         raise ValueError("BOT_TOKEN is not set!")
 
@@ -159,10 +219,19 @@ def main():
 
     app = Application.builder().token(BOT_TOKEN).build()
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("join", join))
     app.add_handler(
-        CallbackQueryHandler(play, pattern=r"^play:")
+        CommandHandler("start", start)
+    )
+
+    app.add_handler(
+        CommandHandler("join", join)
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            play,
+            pattern=r"^play:"
+        )
     )
 
     print("🏏 Hand Cricket Bot is running...")

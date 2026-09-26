@@ -3,6 +3,8 @@ import random
 waiting_player = None
 matches = {}
 
+MAX_WICKETS = 3
+
 
 def join_match(user_id, username):
     global waiting_player
@@ -84,22 +86,68 @@ def submit_choice(match_id, user_id, choice):
 
         if match["batting"] == 1:
             match["wickets1"] += 1
+            wickets = match["wickets1"]
         else:
             match["wickets2"] += 1
+            wickets = match["wickets2"]
+
+        # Innings ends
+        if wickets >= MAX_WICKETS:
+
+            if match["innings"] == 1:
+
+                if match["batting"] == 1:
+                    target = match["score1"] + 1
+                    match["target"] = target
+                    match["batting"] = 2
+                else:
+                    target = match["score2"] + 1
+                    match["target"] = target
+                    match["batting"] = 1
+
+                match["innings"] = 2
+
+                return {
+                    "status": "innings_end",
+                    "target": target,
+                    "score1": match["score1"],
+                    "score2": match["score2"]
+                }
+
+            else:
+                return {
+                    "status": "match_end",
+                    "score1": match["score1"],
+                    "score2": match["score2"]
+                }
 
         return {
             "status": "wicket",
             "choice1": choice1,
             "choice2": choice2,
             "score1": match["score1"],
-            "score2": match["score2"]
+            "score2": match["score2"],
+            "wickets": wickets
         }
 
     # Batter gets their chosen number
     if match["batting"] == 1:
         match["score1"] += choice1
+        current_score = match["score1"]
     else:
         match["score2"] += choice1
+        current_score = match["score2"]
+
+    # Second innings target reached
+    if match["innings"] == 2 and match["target"] is not None:
+
+        if current_score >= match["target"]:
+            return {
+                "status": "match_end",
+                "winner": match["batting"],
+                "score1": match["score1"],
+                "score2": match["score2"]
+            }
 
     return {
         "status": "runs",
